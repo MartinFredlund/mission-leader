@@ -24,6 +24,11 @@ wheels/
 .installed.cfg
 *.egg
 
+# Tailwind
+tailwindcss.exe
+tailwindcss
+node_modules/
+
 # Environment variables
 .env
 .env.local
