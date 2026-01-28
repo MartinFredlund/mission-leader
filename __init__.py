@@ -139,7 +139,6 @@ def create_app():
 
         # 4. Initialize the state for this session in our mock DB
         session_store[unique_id] = {
-            "counter": 0,
             "users": [],
             "player_count": player_count,
             "names": {},  # Maps user_id to name
@@ -166,13 +165,12 @@ def create_app():
         user_id = session["user_id"]
         current_data = session_store[session_id]
 
-        # Only increment counter if this user hasn't visited this session before
+        # Only add user if they haven't visited this session before
         if user_id not in current_data["users"]:
             current_data["users"].append(user_id)
-            session_store[session_id]["counter"] += 1
 
             # Check if we have enough players to assign roles
-            if current_data["counter"] == current_data["player_count"]:
+            if len(current_data["users"]) == current_data["player_count"]:
                 if "roles" not in current_data:
                     assign_roles(session_id)
 
@@ -225,7 +223,7 @@ def create_app():
         return render_template(
             "session.html",
             session_id=session_id,
-            counter=current_data["counter"],
+            counter=len(current_data["users"]),
             player_count=current_data.get("player_count", 5),
             user_id=user_id,
             user_role=user_role,
@@ -290,7 +288,7 @@ def create_app():
             del current_data["role_details"]
 
         # Check if we have enough players to assign roles now
-        if current_data["counter"] == player_count:
+        if len(current_data["users"]) == player_count:
             assign_roles(session_id)
 
         return redirect(url_for("view_session", session_id=session_id))
@@ -350,7 +348,7 @@ def create_app():
 
         return jsonify(
             {
-                "counter": current_data["counter"],
+                "counter": len(current_data["users"]),
                 "player_count": current_data["player_count"],
                 "player_names": list(current_data["names"].values()),
                 "user_role": user_role,
