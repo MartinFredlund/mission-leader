@@ -169,11 +169,6 @@ def create_app():
         if user_id not in current_data["users"]:
             current_data["users"].append(user_id)
 
-            # Check if we have enough named players to assign roles
-            if len(current_data["names"]) == current_data["player_count"]:
-                if "roles" not in current_data:
-                    assign_roles(session_id)
-
         # Get the user's role if roles have been assigned
         user_role = None
         user_role_detail = None
@@ -250,6 +245,12 @@ def create_app():
 
         if name and len(name) <= 50:  # Validate name
             session_store[session_id]["names"][user_id] = name
+
+            # Check if we now have enough players to assign roles
+            current_data = session_store[session_id]
+            if len(current_data["names"]) >= current_data["player_count"]:
+                if "roles" not in current_data:
+                    assign_roles(session_id)
 
         return redirect(url_for("view_session", session_id=session_id))
 
