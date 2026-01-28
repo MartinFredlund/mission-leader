@@ -223,7 +223,7 @@ def create_app():
         return render_template(
             "session.html",
             session_id=session_id,
-            counter=len(current_data["users"]),
+            counter=len(current_data["names"]),
             player_count=current_data.get("player_count", 5),
             user_id=user_id,
             user_role=user_role,
@@ -348,7 +348,7 @@ def create_app():
 
         return jsonify(
             {
-                "counter": len(current_data["users"]),
+                "counter": len(current_data["names"]),
                 "player_count": current_data["player_count"],
                 "player_names": list(current_data["names"].values()),
                 "user_role": user_role,
