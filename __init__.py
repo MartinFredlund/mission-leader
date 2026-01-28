@@ -1,8 +1,7 @@
-from flask import redirect, url_for, render_template, request, session, jsonify
+from flask import Flask, redirect, url_for, render_template, request, session, jsonify
+import secrets
 import uuid
 import random
-
-# from models import
 
 # Role distribution based on player count
 ROLE_CONFIG = {
@@ -100,7 +99,9 @@ def assign_roles(session_id):
     session_store[session_id]["role_details"] = role_details
 
 
-def register_routes(app):
+def create_app():
+    app = Flask(__name__)
+    app.secret_key = secrets.token_hex(16)
 
     @app.route("/")
     def home():
@@ -228,6 +229,7 @@ def register_routes(app):
             spy_names=spy_names,
             known_spies=known_spies,
             commander_info=commander_info,
+            special_roles=current_data.get("special_roles", {}),
         )
 
     @app.route("/s/<session_id>/set_name", methods=["POST"])
@@ -244,6 +246,46 @@ def register_routes(app):
 
         if name and len(name) <= 50:  # Validate name
             session_store[session_id]["names"][user_id] = name
+
+        return redirect(url_for("view_session", session_id=session_id))
+
+    @app.route("/s/<session_id>/reset", methods=["POST"])
+    def reset_session(session_id):
+        """Reset the session to allow reconfiguration while keeping all players."""
+        if session_id not in session_store:
+            return "404 - Session not found", 404
+
+        if "user_id" not in session:
+            return redirect(url_for("view_session", session_id=session_id))
+
+        # Get new configuration
+        player_count = int(request.form.get("player_count", 5))
+        if player_count < 5 or player_count > 10:
+            player_count = 5
+
+        special_roles = {
+            "commander": bool(request.form.get("commander")),
+            "bodyguard": bool(request.form.get("bodyguard")),
+            "assassin": bool(request.form.get("assassin")),
+            "false_commander": bool(request.form.get("false_commander")),
+            "deep_cover": bool(request.form.get("deep_cover")),
+            "blind_spy": bool(request.form.get("blind_spy")),
+        }
+
+        # Reset roles but keep users and names
+        current_data = session_store[session_id]
+        current_data["player_count"] = player_count
+        current_data["special_roles"] = special_roles
+
+        # Remove role assignments to start fresh
+        if "roles" in current_data:
+            del current_data["roles"]
+        if "role_details" in current_data:
+            del current_data["role_details"]
+
+        # Check if we have enough players to assign roles now
+        if current_data["counter"] == player_count:
+            assign_roles(session_id)
 
         return redirect(url_for("view_session", session_id=session_id))
 
@@ -313,3 +355,5 @@ def register_routes(app):
                 "commander_info": commander_info,
             }
         )
+
+    return app

@@ -11,6 +11,21 @@
       }
     </style>
     <script>
+      // Copy invite link to clipboard
+      function copyInviteLink() {
+        const inviteLink = window.location.href;
+        navigator.clipboard.writeText(inviteLink).then(function() {
+          const btn = document.getElementById('copy-btn');
+          const originalText = btn.innerHTML;
+          btn.innerHTML = 'Copied!';
+          btn.classList.add('bg-green-600');
+          setTimeout(function() {
+            btn.innerHTML = originalText;
+            btn.classList.remove('bg-green-600');
+          }, 2000);
+        });
+      }
+
       // Polling to update session status in real-time
       {% if user_name %}
       let pollInterval = setInterval(function() {
@@ -93,6 +108,32 @@
           .catch(error => console.error('Polling error:', error));
       }, 2000); // Poll every 2 seconds
       {% endif %}
+
+      // Toggle role information visibility
+      function toggleRoleInfo() {
+        const roleInfo = document.getElementById('role-info');
+        const toggleBtn = document.getElementById('toggle-role-btn');
+        if (roleInfo.classList.contains('hidden')) {
+          roleInfo.classList.remove('hidden');
+          toggleBtn.textContent = 'Hide Role Info';
+        } else {
+          roleInfo.classList.add('hidden');
+          toggleBtn.textContent = 'Show Role Info';
+        }
+      }
+
+      // Toggle game setup visibility
+      function toggleSetupInfo() {
+        const setupInfo = document.getElementById('setup-info');
+        const toggleBtn = document.getElementById('toggle-setup-btn');
+        if (setupInfo.classList.contains('hidden')) {
+          setupInfo.classList.remove('hidden');
+          toggleBtn.textContent = 'Hide Setup';
+        } else {
+          setupInfo.classList.add('hidden');
+          toggleBtn.textContent = 'Show Setup';
+        }
+      }
     </script>
   </head>
   <body class="min-h-screen p-4 md:p-8">
@@ -109,9 +150,7 @@
           >
             🕵️ MISSION: {{ session_id[:12] }}...
           </h1>
-          <p class="text-slate-400 text-sm font-mono">
-            🔐 Secure Channel Active
-          </p>
+          <p class="text-slate-400 text-sm font-mono">Secure Channel Active</p>
         </div>
       </div>
 
@@ -122,7 +161,7 @@
       >
         <div class="max-w-md mx-auto">
           <h2 class="text-2xl font-bold text-slate-200 mb-4">
-            🎭 Agent Identification
+            Agent Identification
           </h2>
           <p class="text-slate-400 mb-6">
             Enter your codename to join the operation
@@ -144,7 +183,7 @@
               type="submit"
               class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 px-6 rounded-lg shadow-lg transform transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500/50"
             >
-              🔓 JOIN OPERATION
+              JOIN OPERATION
             </button>
           </form>
         </div>
@@ -170,12 +209,119 @@
           </div>
         </div>
 
+        <!-- Invite Link Button -->
+        <div
+          class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 p-4"
+        >
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-slate-300 font-semibold">Invite Link</p>
+              <p class="text-slate-500 text-sm">
+                Share this link with your team
+              </p>
+            </div>
+            <button
+              id="copy-btn"
+              onclick="copyInviteLink()"
+              class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Copy Link
+            </button>
+          </div>
+        </div>
+
+        <!-- Game Setup Info -->
+        <div class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 p-4">
+          <button
+            id="toggle-setup-btn"
+            onclick="toggleSetupInfo()"
+            class="w-full text-left flex items-center justify-between bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <span>Show Setup</span>
+            <span class="text-slate-400">▼</span>
+          </button>
+          
+          <div id="setup-info" class="hidden mt-4 space-y-3">
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+              <h4 class="text-slate-300 font-semibold mb-3">Team Distribution</h4>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="bg-green-900/30 rounded-lg p-3 border border-green-700">
+                  <p class="text-green-400 font-semibold text-sm">Resistance</p>
+                  <p class="text-2xl font-bold text-green-300">
+                    {% if player_count == 5 %}3{% elif player_count == 6 %}4{% elif player_count == 7 %}4{% elif player_count == 8 %}5{% elif player_count == 9 %}6{% elif player_count == 10 %}6{% endif %}
+                  </p>
+                </div>
+                <div class="bg-red-900/30 rounded-lg p-3 border border-red-700">
+                  <p class="text-red-400 font-semibold text-sm">Spies</p>
+                  <p class="text-2xl font-bold text-red-300">
+                    {% if player_count == 5 %}2{% elif player_count == 6 %}2{% elif player_count == 7 %}3{% elif player_count == 8 %}3{% elif player_count == 9 %}3{% elif player_count == 10 %}4{% endif %}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {% if special_roles.commander or special_roles.bodyguard or special_roles.assassin or special_roles.false_commander or special_roles.deep_cover or special_roles.blind_spy %}
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+              <h4 class="text-slate-300 font-semibold mb-3">Special Roles Active</h4>
+              <div class="space-y-2">
+                {% if special_roles.commander %}
+                <div class="flex items-center text-sm">
+                  <span class="w-2 h-2 bg-yellow-500 rounded-full mr-3"></span>
+                  <span class="text-green-400 font-semibold mr-2">Commander</span>
+                  <span class="text-slate-500">- Knows all spies</span>
+                </div>
+                {% endif %}
+                {% if special_roles.bodyguard %}
+                <div class="flex items-center text-sm">
+                  <span class="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                  <span class="text-green-400 font-semibold mr-2">Bodyguard</span>
+                  <span class="text-slate-500">- Knows the Commander</span>
+                </div>
+                {% endif %}
+                {% if special_roles.assassin %}
+                <div class="flex items-center text-sm">
+                  <span class="w-2 h-2 bg-red-500 rounded-full mr-3"></span>
+                  <span class="text-red-400 font-semibold mr-2">Assassin</span>
+                  <span class="text-slate-500">- Can shoot Commander</span>
+                </div>
+                {% endif %}
+                {% if special_roles.false_commander %}
+                <div class="flex items-center text-sm">
+                  <span class="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
+                  <span class="text-red-400 font-semibold mr-2">False Commander</span>
+                  <span class="text-slate-500">- Confuses Bodyguard</span>
+                </div>
+                {% endif %}
+                {% if special_roles.deep_cover %}
+                <div class="flex items-center text-sm">
+                  <span class="w-2 h-2 bg-gray-500 rounded-full mr-3"></span>
+                  <span class="text-red-400 font-semibold mr-2">Deep Cover</span>
+                  <span class="text-slate-500">- Hidden from Commander</span>
+                </div>
+                {% endif %}
+                {% if special_roles.blind_spy %}
+                <div class="flex items-center text-sm">
+                  <span class="w-2 h-2 bg-slate-500 rounded-full mr-3"></span>
+                  <span class="text-red-400 font-semibold mr-2">Blind Spy</span>
+                  <span class="text-slate-500">- Doesn't know other spies</span>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            {% else %}
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+              <p class="text-slate-400 text-sm text-center">No special roles active</p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
         <!-- Players in Lobby -->
         <div
           class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 p-6"
         >
-          <h3 class="text-xl font-bold text-slate-200 mb-4 flex items-center">
-            <span class="mr-2">👥</span> Operatives in Briefing Room
+          <h3 class="text-xl font-bold text-slate-200 mb-4">
+            Operatives in Briefing Room
           </h3>
           <ul id="player-list" class="space-y-2">
             {% for name in player_names %}
@@ -192,14 +338,25 @@
         </div>
 
         {% if user_role %}
+        <!-- Toggle Role Button -->
+        <div class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 p-4">
+          <button
+            id="toggle-role-btn"
+            onclick="toggleRoleInfo()"
+            class="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            Hide Role Info
+          </button>
+        </div>
+
         <!-- Role Assignment -->
+        <div id="role-info">
         {% if user_role == 'resistance' %}
         <div
           class="bg-gradient-to-br from-green-900 to-slate-800 rounded-lg shadow-xl border-2 border-green-700 p-6"
         >
           <div class="flex items-center mb-4">
             {% if user_role_detail == 'commander' %}
-            <span class="text-4xl mr-3">👑</span>
             <div>
               <h2 class="text-2xl font-bold text-yellow-400">THE COMMANDER</h2>
               <p class="text-green-300 text-sm">
@@ -207,7 +364,6 @@
               </p>
             </div>
             {% elif user_role_detail == 'bodyguard' %}
-            <span class="text-4xl mr-3">🛡️</span>
             <div>
               <h2 class="text-2xl font-bold text-blue-400">THE BODYGUARD</h2>
               <p class="text-green-300 text-sm">
@@ -215,7 +371,6 @@
               </p>
             </div>
             {% else %}
-            <span class="text-4xl mr-3">🛡️</span>
             <div>
               <h2 class="text-2xl font-bold text-green-400">
                 RESISTANCE OPERATIVE
@@ -229,7 +384,7 @@
           <div class="bg-slate-900/50 rounded-lg p-4 border border-green-800">
             {% if user_role_detail == 'commander' %}
             <p class="text-slate-300 text-lg mb-2">
-              ✅ You are the
+              You are the
               <span class="text-yellow-400 font-bold">Commander</span>!
             </p>
             <p class="text-slate-400 mb-3">
@@ -240,9 +395,7 @@
             <div
               class="bg-red-950/30 rounded-lg p-3 border border-yellow-700 mt-3"
             >
-              <h4 class="text-yellow-400 font-semibold mb-2">
-                🔍 Known Spies:
-              </h4>
+              <h4 class="text-yellow-400 font-semibold mb-2">Known Spies:</h4>
               <ul id="known-spies-list" class="space-y-1">
                 {% for spy in known_spies %}
                 <li class="text-red-300">• {{ spy }}</li>
@@ -251,7 +404,7 @@
             </div>
             {% endif %} {% elif user_role_detail == 'bodyguard' %}
             <p class="text-slate-300 text-lg mb-2">
-              ✅ You are the
+              You are the
               <span class="text-blue-400 font-bold">Bodyguard</span>!
             </p>
             <p class="text-slate-400 mb-3">
@@ -263,7 +416,7 @@
               class="bg-blue-950/30 rounded-lg p-3 border border-blue-700 mt-3"
             >
               <h4 class="text-blue-400 font-semibold mb-2">
-                👑 Possible Commander(s):
+                Possible Commander(s):
               </h4>
               <ul id="commander-info-list" class="space-y-1">
                 {% for name in commander_info %}
@@ -272,13 +425,13 @@
               </ul>
               {% if commander_info|length > 1 %}
               <p class="text-slate-500 text-sm mt-2">
-                ⚠️ False Commander may be present
+                False Commander may be present
               </p>
               {% endif %}
             </div>
             {% endif %} {% else %}
             <p class="text-slate-300 text-lg">
-              ✅ You are part of the
+              You are part of the
               <span class="text-green-400 font-bold">Resistance</span>!
             </p>
             <p class="text-slate-400 mt-2">
@@ -294,7 +447,6 @@
         >
           <div class="flex items-center mb-4">
             {% if user_role_detail == 'assassin' %}
-            <span class="text-4xl mr-3">🔪</span>
             <div>
               <h2 class="text-2xl font-bold text-red-400">THE ASSASSIN</h2>
               <p class="text-red-300 text-sm">
@@ -302,7 +454,6 @@
               </p>
             </div>
             {% elif user_role_detail == 'false_commander' %}
-            <span class="text-4xl mr-3">👺</span>
             <div>
               <h2 class="text-2xl font-bold text-purple-400">
                 FALSE COMMANDER
@@ -310,19 +461,16 @@
               <p class="text-red-300 text-sm">Classification: Deep Cover</p>
             </div>
             {% elif user_role_detail == 'deep_cover' %}
-            <span class="text-4xl mr-3">🥷</span>
             <div>
               <h2 class="text-2xl font-bold text-gray-400">DEEP COVER</h2>
               <p class="text-red-300 text-sm">Classification: Ghost Agent</p>
             </div>
             {% elif user_role_detail == 'blind_spy' %}
-            <span class="text-4xl mr-3">😶‍🌫️</span>
             <div>
               <h2 class="text-2xl font-bold text-slate-400">BLIND SPY</h2>
               <p class="text-red-300 text-sm">Classification: Lone Wolf</p>
             </div>
             {% else %}
-            <span class="text-4xl mr-3">🎭</span>
             <div>
               <h2 class="text-2xl font-bold text-red-400">SPY</h2>
               <p class="text-red-300 text-sm">Classification: Double Agent</p>
@@ -334,7 +482,7 @@
           >
             {% if user_role_detail == 'assassin' %}
             <p class="text-slate-300 text-lg">
-              🔴 You are the
+              You are the
               <span class="text-red-400 font-bold">Assassin</span>!
             </p>
             <p class="text-slate-400 mt-2">
@@ -343,7 +491,7 @@
             </p>
             {% elif user_role_detail == 'false_commander' %}
             <p class="text-slate-300 text-lg">
-              🔴 You are the
+              You are the
               <span class="text-purple-400 font-bold">False Commander</span>!
             </p>
             <p class="text-slate-400 mt-2">
@@ -352,7 +500,7 @@
             </p>
             {% elif user_role_detail == 'deep_cover' %}
             <p class="text-slate-300 text-lg">
-              🔴 You are in
+              You are in
               <span class="text-gray-400 font-bold">Deep Cover</span>!
             </p>
             <p class="text-slate-400 mt-2">
@@ -361,7 +509,7 @@
             </p>
             {% elif user_role_detail == 'blind_spy' %}
             <p class="text-slate-300 text-lg">
-              🔴 You are a
+              You are a
               <span class="text-slate-400 font-bold">Blind Spy</span>!
             </p>
             <p class="text-slate-400 mt-2">
@@ -370,7 +518,7 @@
             </p>
             {% else %}
             <p class="text-slate-300 text-lg">
-              🔴 You are a <span class="text-red-400 font-bold">Spy</span>!
+              You are a <span class="text-red-400 font-bold">Spy</span>!
             </p>
             <p class="text-slate-400 mt-2">
               Your mission: Infiltrate and sabotage operations without being
@@ -380,8 +528,8 @@
           </div>
           {% if spy_names %}
           <div class="bg-red-950/50 rounded-lg p-4 border border-red-800">
-            <h3 class="text-lg font-bold text-red-400 mb-3 flex items-center">
-              <span class="mr-2">🤝</span> Allied Spies (Eyes Only)
+            <h3 class="text-lg font-bold text-red-400 mb-3">
+              Allied Spies (Eyes Only)
             </h3>
             <ul id="spy-list" class="space-y-2">
               {% for spy_name in spy_names %}
@@ -396,7 +544,9 @@
           </div>
           {% endif %}
         </div>
-        {% endif %} {% else %}
+        {% endif %}
+        </div>
+        {% else %}
         <!-- Waiting State -->
         <div
           class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 p-8 text-center"
@@ -413,6 +563,219 @@
         </div>
         {% endif %}
 
+        <!-- Reset Game Section (shown when roles are assigned) -->
+        {% if user_role %}
+        <div
+          class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 p-6"
+        >
+          <button
+            onclick="
+              document.getElementById('reset-form').classList.toggle('hidden')
+            "
+            class="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold py-3 px-6 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            Start New Game (Keep Players)
+          </button>
+
+          <!-- Reset Configuration Form (hidden by default) -->
+          <div
+            id="reset-form"
+            class="hidden mt-6 pt-6 border-t border-slate-700"
+          >
+            <h3 class="text-slate-200 font-semibold mb-4 text-lg">
+              Reconfigure Game Settings
+            </h3>
+            <form
+              action="/s/{{ session_id }}/reset"
+              method="post"
+              class="space-y-4"
+            >
+              <div>
+                <label
+                  for="player_count"
+                  class="block text-slate-300 font-semibold mb-2"
+                >
+                  Number of Operatives:
+                </label>
+                <select
+                  name="player_count"
+                  id="player_count"
+                  required
+                  class="w-full bg-slate-900 border-2 border-slate-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  {% if counter <= 5 %}<option value="5" {% if player_count == 5 %}selected{% endif %}>5 Operatives</option>{% endif %}
+                  {% if counter <= 6 %}<option value="6" {% if player_count == 6 %}selected{% endif %}>6 Operatives</option>{% endif %}
+                  {% if counter <= 7 %}<option value="7" {% if player_count == 7 %}selected{% endif %}>7 Operatives</option>{% endif %}
+                  {% if counter <= 8 %}<option value="8" {% if player_count == 8 %}selected{% endif %}>8 Operatives</option>{% endif %}
+                  {% if counter <= 9 %}<option value="9" {% if player_count == 9 %}selected{% endif %}>9 Operatives</option>{% endif %}
+                  {% if counter <= 10 %}<option value="10" {% if player_count == 10 %}selected{% endif %}>10 Operatives</option>{% endif %}
+                </select>
+                <p class="text-slate-500 text-sm mt-2">
+                  Current players: {{ counter }} (minimum must be {{ counter }} or more)
+                </p>
+              </div>
+
+              <div
+                class="bg-slate-900/50 rounded-lg p-4 border border-slate-700"
+              >
+                <h4 class="text-slate-200 font-semibold mb-3">
+                  Special Roles (Optional)
+                </h4>
+
+                <div class="mb-3">
+                  <p class="text-green-400 font-semibold mb-2 text-sm">
+                    Resistance:
+                  </p>
+                  <div class="space-y-2 ml-4">
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="commander"
+                        value="1"
+                        {%
+                        if
+                        special_roles.commander
+                        %}checked{%
+                        endif
+                        %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Commander</span>
+                        <p class="text-xs text-slate-500">Knows all spies</p>
+                      </div>
+                    </label>
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="bodyguard"
+                        value="1"
+                        {%
+                        if
+                        special_roles.bodyguard
+                        %}checked{%
+                        endif
+                        %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Bodyguard</span>
+                        <p class="text-xs text-slate-500">
+                          Knows the Commander
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <p class="text-red-400 font-semibold mb-2 text-sm">Spies:</p>
+                  <div class="space-y-2 ml-4">
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="assassin"
+                        value="1"
+                        {%
+                        if
+                        special_roles.assassin
+                        %}checked{%
+                        endif
+                        %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Assassin</span>
+                        <p class="text-xs text-slate-500">
+                          Can shoot Commander
+                        </p>
+                      </div>
+                    </label>
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="false_commander"
+                        value="1"
+                        {%
+                        if
+                        special_roles.false_commander
+                        %}checked{%
+                        endif
+                        %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">False Commander</span>
+                        <p class="text-xs text-slate-500">Confuses Bodyguard</p>
+                      </div>
+                    </label>
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="deep_cover"
+                        value="1"
+                        {%
+                        if
+                        special_roles.deep_cover
+                        %}checked{%
+                        endif
+                        %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Deep Cover</span>
+                        <p class="text-xs text-slate-500">
+                          Hidden from Commander
+                        </p>
+                      </div>
+                    </label>
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="blind_spy"
+                        value="1"
+                        {%
+                        if
+                        special_roles.blind_spy
+                        %}checked{%
+                        endif
+                        %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Blind Spy</span>
+                        <p class="text-xs text-slate-500">
+                          Doesn't know other spies
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all focus:outline-none focus:ring-4 focus:ring-green-500/50"
+              >
+                Reset & Reassign Roles
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Footer Info -->
         <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
           <div class="flex justify-between items-center text-sm">
@@ -425,7 +788,7 @@
             <a
               href="/"
               class="text-blue-400 hover:text-blue-300 transition-colors font-semibold"
-              >🏠 Return to Command</a
+              >Return to Command</a
             >
           </div>
         </div>
