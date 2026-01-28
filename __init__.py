@@ -1,5 +1,5 @@
 from flask import Flask, redirect, url_for, render_template, request, session, jsonify
-import secrets
+import os
 import uuid
 import random
 
@@ -101,7 +101,7 @@ def assign_roles(session_id):
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = secrets.token_hex(16)
+    app.secret_key = os.environ.get("SECRET_KEY")
 
     # Support for being mounted at a sub-path
     @app.url_defaults
