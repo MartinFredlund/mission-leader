@@ -103,6 +103,12 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = secrets.token_hex(16)
 
+    # Support for being mounted at a sub-path
+    @app.url_defaults
+    def add_script_name(endpoint, values):
+        """Add SCRIPT_NAME to all generated URLs"""
+        pass  # Flask will automatically use SCRIPT_NAME from environ
+
     @app.route("/")
     def home():
         """The landing page with a button to start a new session."""

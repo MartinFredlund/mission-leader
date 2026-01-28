@@ -46,7 +46,11 @@
             </p>
           </div>
 
-          <form action="/create_session" method="post" class="space-y-6">
+          <form
+            action="{{ url_for('create_session') }}"
+            method="post"
+            class="space-y-6"
+          >
             <div>
               <label
                 for="player_count"
