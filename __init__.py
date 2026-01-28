@@ -1,4 +1,4 @@
-from flask import Flask, redirect, url_for, render_template, request, session, jsonify
+from flask import Flask, redirect, url_for, render_template, request, session, jsonify, flash
 import secrets
 import uuid
 import random
@@ -111,8 +111,9 @@ def create_app():
 
     @app.route("/")
     def home():
+        special_roles = session.get("special_roles")
         """The landing page with a button to start a new session."""
-        return render_template("home.html")
+        return render_template("home.html", special_roles=special_roles)
 
     @app.route("/create_session", methods=["POST"])
     def create_session():
@@ -127,12 +128,22 @@ def create_app():
         # 2. Get special roles selection
         special_roles = {
             "commander": bool(request.form.get("commander")),
-            "bodyguard": bool(request.form.get("bodyguard")) and bool(request.form.get("commander")),
-            "assassin": bool(request.form.get("assassin")) and bool(request.form.get("commander")),
-            "false_commander": bool(request.form.get("false_commander")) and bool(request.form.get("bodyguard")),
-            "deep_cover": bool(request.form.get("deep_cover")) and bool(request.form.get("commander")),
+            "bodyguard": bool(request.form.get("bodyguard")),
+            "assassin": bool(request.form.get("assassin")),
+            "false_commander": bool(request.form.get("false_commander")),
+            "deep_cover": bool(request.form.get("deep_cover")),
             "blind_spy": bool(request.form.get("blind_spy")),
         }
+
+        session["special_roles"] = special_roles
+        if (
+            (special_roles["assassin"] and not special_roles["commander"]) or
+            (special_roles["bodyguard"] and not special_roles["commander"]) or
+            (special_roles["false_commander"] and not special_roles["bodyguard"]) or
+            (special_roles["deep_cover"] and not special_roles["commander"])
+        ):
+            flash("Invalid role selection")
+            return redirect(url_for("home"))
 
         # 3. Generate a unique identifier
         unique_id = uuid.uuid4().hex
