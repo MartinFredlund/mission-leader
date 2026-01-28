@@ -127,10 +127,10 @@ def create_app():
         # 2. Get special roles selection
         special_roles = {
             "commander": bool(request.form.get("commander")),
-            "bodyguard": bool(request.form.get("bodyguard")),
-            "assassin": bool(request.form.get("assassin")),
-            "false_commander": bool(request.form.get("false_commander")),
-            "deep_cover": bool(request.form.get("deep_cover")),
+            "bodyguard": bool(request.form.get("bodyguard")) and bool(request.form.get("commander")),
+            "assassin": bool(request.form.get("assassin")) and bool(request.form.get("commander")),
+            "false_commander": bool(request.form.get("false_commander")) and bool(request.form.get("bodyguard")),
+            "deep_cover": bool(request.form.get("deep_cover")) and bool(request.form.get("commander")),
             "blind_spy": bool(request.form.get("blind_spy")),
         }
 
