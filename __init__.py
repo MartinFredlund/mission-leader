@@ -169,8 +169,8 @@ def create_app():
         if user_id not in current_data["users"]:
             current_data["users"].append(user_id)
 
-            # Check if we have enough players to assign roles
-            if len(current_data["users"]) == current_data["player_count"]:
+            # Check if we have enough named players to assign roles
+            if len(current_data["names"]) == current_data["player_count"]:
                 if "roles" not in current_data:
                     assign_roles(session_id)
 
@@ -287,8 +287,8 @@ def create_app():
         if "role_details" in current_data:
             del current_data["role_details"]
 
-        # Check if we have enough players to assign roles now
-        if len(current_data["users"]) == player_count:
+        # Check if we have enough named players to assign roles now
+        if len(current_data["names"]) == player_count:
             assign_roles(session_id)
 
         return redirect(url_for("view_session", session_id=session_id))
