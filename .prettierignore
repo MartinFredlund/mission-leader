@@ -1,0 +1,9 @@
+# Ignore template files (Jinja2 syntax conflicts with Prettier)
+templates/
+*.html
+
+# Keep other common ignores
+node_modules/
+__pycache__/
+*.pyc
+.git/
