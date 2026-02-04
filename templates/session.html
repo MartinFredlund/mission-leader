@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mission {{ session_id[:8] }} - Operations Room</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
       body {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
@@ -24,6 +25,31 @@
             btn.classList.remove('bg-green-600');
           }, 2000);
         });
+      }
+
+      // Show QR code modal
+      function showQRCode() {
+        const modal = document.getElementById('qr-modal');
+        modal.classList.remove('hidden');
+        
+        // Generate QR code if not already generated
+        const qrContainer = document.getElementById('qrcode');
+        if (!qrContainer.hasChildNodes()) {
+          new QRCode(qrContainer, {
+            text: window.location.href,
+            width: 256,
+            height: 256,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H
+          });
+        }
+      }
+
+      // Hide QR code modal
+      function hideQRCode() {
+        const modal = document.getElementById('qr-modal');
+        modal.classList.add('hidden');
       }
 
       // Polling to update session status in real-time
@@ -92,19 +118,16 @@
               });
             }
 
-            // If roles assigned and user doesn't have role yet, reload page to show role
+            // Only reload if user doesn't have a role yet and roles just got assigned
             {% if not user_role %}
             if (data.roles_assigned && data.user_role) {
               location.reload();
             }
             {% else %}
-            // If roles were removed (game reset), reload to show new state
-            if (!data.roles_assigned) {
+            // If user's role has changed (after reset & reassign), reload to show new role
+            const currentRole = '{{ user_role }}';
+            if (data.user_role && data.user_role !== currentRole) {
               location.reload();
-            }
-            // If user already has a role and everyone has joined, stop polling
-            if (data.roles_assigned && data.counter >= data.player_count) {
-              clearInterval(pollInterval);
             }
             {% endif %}
           })
@@ -151,7 +174,7 @@
           <h1
             class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-2"
           >
-            🕵️ MISSION: {{ session_id[:12] }}...
+            <span class="select-none">🕵️</span> MISSION: {{ session_id[:12] }}...
           </h1>
           <p class="text-slate-400 text-sm font-mono">Secure Channel Active</p>
         </div>
@@ -167,7 +190,7 @@
             Agent Identification
           </h2>
           <p class="text-slate-400 mb-6">
-            Enter your codename to join the operation
+            Enter your name to join the operation
           </p>
           <form
             action="{{ url_for('set_name', session_id=session_id) }}"
@@ -177,7 +200,7 @@
             <input
               type="text"
               name="name"
-              placeholder="Enter your codename..."
+              placeholder="Enter your name..."
               required
               maxlength="50"
               class="w-full bg-slate-900 border-2 border-slate-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
@@ -218,18 +241,42 @@
         >
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-slate-300 font-semibold">Invite Link</p>
+              <p class="text-slate-300 font-semibold">Invite Team</p>
               <p class="text-slate-500 text-sm">
                 Share this link with your team
               </p>
             </div>
-            <button
-              id="copy-btn"
-              onclick="copyInviteLink()"
-              class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              Copy Link
-            </button>
+            <div class="flex gap-2">
+              <button
+                onclick="showQRCode()"
+                class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                QR Code
+              </button>
+              <button
+                id="copy-btn"
+                onclick="copyInviteLink()"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Copy Link
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- QR Code Modal -->
+        <div id="qr-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onclick="hideQRCode()">
+          <div class="bg-slate-800 rounded-lg p-6 max-w-sm mx-4 border-2 border-slate-700" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-xl font-bold text-slate-200">Scan to Join</h3>
+              <button onclick="hideQRCode()" class="text-slate-400 hover:text-slate-200 text-2xl leading-none">&times;</button>
+            </div>
+            <div class="flex justify-center mb-4">
+              <div id="qrcode" class="bg-white p-4 rounded-lg inline-block"></div>
+            </div>
+            <p class="text-slate-400 text-sm text-center">
+              Scan this QR code with your phone to join the session
+            </p>
           </div>
         </div>
 
@@ -557,7 +604,7 @@
             {% if spy_names %}
             <div class="bg-red-950/50 rounded-lg p-4 border border-red-800">
               <h3 class="text-lg font-bold text-red-400 mb-3">
-                Allied Spies (Eyes Only)
+                Allied Spies
               </h3>
               <ul id="spy-list" class="space-y-2">
                 {% for spy_name in spy_names %}

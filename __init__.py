@@ -22,7 +22,8 @@ def assign_roles(session_id):
     """Randomly assign roles to all users in a session."""
     current_data = session_store[session_id]
     player_count = current_data["player_count"]
-    users = current_data["users"].copy()
+    # Only assign roles to players who have entered a name
+    users = list(current_data["names"].keys())
     special_roles = current_data.get("special_roles", {})
 
     # Get role distribution for this player count
@@ -166,18 +167,12 @@ def create_app():
         user_id = session["user_id"]
         current_data = session_store[session_id]
 
-        # Only add user if they haven't visited this session before
+        # Track that this user has visited (for users list)
         if user_id not in current_data["users"]:
             current_data["users"].append(user_id)
-            session_store[session_id]["counter"] += 1
 
-        # Check if we have enough players to assign/reassign roles
-        if current_data["counter"] >= current_data["player_count"]:
-            # Reassign if roles don't exist OR if a user doesn't have a role
-            if "roles" not in current_data or (
-                user_id not in current_data.get("roles", {})
-            ):
-                assign_roles(session_id)
+        # Counter now represents players with names
+        current_data["counter"] = len(current_data["names"])
 
         # Get the user's role if roles have been assigned
         user_role = None
@@ -228,7 +223,7 @@ def create_app():
         return render_template(
             "session.html",
             session_id=session_id,
-            counter=len(current_data["names"]),
+            counter=current_data["counter"],
             player_count=current_data.get("player_count", 5),
             user_id=user_id,
             user_role=user_role,
@@ -254,13 +249,24 @@ def create_app():
         name = request.form.get("name", "").strip()
 
         if name and len(name) <= 50:  # Validate name
-            session_store[session_id]["names"][user_id] = name
-
-            # Check if we now have enough players to assign roles
             current_data = session_store[session_id]
-            if len(current_data["names"]) >= current_data["player_count"]:
-                if "roles" not in current_data:
-                    assign_roles(session_id)
+
+            # Add name only if not already set (prevent race condition overwrites)
+            if user_id not in current_data["names"]:
+                current_data["names"][user_id] = name
+                # Update counter to reflect named players
+                current_data["counter"] = len(current_data["names"])
+
+                # Check if we now have enough players to assign roles
+                # Use double-check to prevent race condition
+                if current_data["counter"] >= current_data["player_count"]:
+                    if "roles" not in current_data:
+                        # Set a flag immediately to prevent concurrent assignment
+                        current_data["roles"] = {}  # Placeholder
+                        assign_roles(session_id)
+            else:
+                # Name already exists, just update it
+                current_data["names"][user_id] = name
 
         return redirect(url_for("view_session", session_id=session_id))
 
