@@ -171,9 +171,12 @@ def create_app():
             current_data["users"].append(user_id)
             session_store[session_id]["counter"] += 1
 
-        # Check if we have enough players to assign roles (check every time, not just when joining)
+        # Check if we have enough players to assign/reassign roles
         if current_data["counter"] >= current_data["player_count"]:
-            if "roles" not in current_data:
+            # Reassign if roles don't exist OR if a user doesn't have a role
+            if "roles" not in current_data or (
+                user_id not in current_data.get("roles", {})
+            ):
                 assign_roles(session_id)
 
         # Get the user's role if roles have been assigned
@@ -356,7 +359,7 @@ def create_app():
 
         return jsonify(
             {
-                "counter": len(current_data["names"]),
+                "counter": current_data["counter"],
                 "player_count": current_data["player_count"],
                 "player_names": list(current_data["names"].values()),
                 "user_role": user_role,

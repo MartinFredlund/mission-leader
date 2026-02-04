@@ -95,12 +95,15 @@
             // If roles assigned and user doesn't have role yet, reload page to show role
             {% if not user_role %}
             if (data.roles_assigned && data.user_role) {
-              clearInterval(pollInterval);
               location.reload();
             }
             {% else %}
-            // If user already has a role, stop polling after roles are assigned
-            if (data.roles_assigned) {
+            // If roles were removed (game reset), reload to show new state
+            if (!data.roles_assigned) {
+              location.reload();
+            }
+            // If user already has a role and everyone has joined, stop polling
+            if (data.roles_assigned && data.counter >= data.player_count) {
               clearInterval(pollInterval);
             }
             {% endif %}
