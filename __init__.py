@@ -1,5 +1,5 @@
 from flask import Flask, redirect, url_for, render_template, request, session, jsonify
-import secrets
+import os
 import uuid
 import random
 
@@ -101,7 +101,13 @@ def assign_roles(session_id):
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = secrets.token_hex(16)
+    app.secret_key = os.environ.get("SECRET_KEY")
+
+    # Support for being mounted at a sub-path
+    @app.url_defaults
+    def add_script_name(endpoint, values):
+        """Add SCRIPT_NAME to all generated URLs"""
+        pass  # Flask will automatically use SCRIPT_NAME from environ
 
     @app.route("/")
     def home():
@@ -133,7 +139,6 @@ def create_app():
 
         # 4. Initialize the state for this session in our mock DB
         session_store[unique_id] = {
-            "counter": 0,
             "users": [],
             "player_count": player_count,
             "names": {},  # Maps user_id to name
@@ -160,7 +165,7 @@ def create_app():
         user_id = session["user_id"]
         current_data = session_store[session_id]
 
-        # Only increment counter if this user hasn't visited this session before
+        # Only add user if they haven't visited this session before
         if user_id not in current_data["users"]:
             current_data["users"].append(user_id)
             session_store[session_id]["counter"] += 1
@@ -219,7 +224,7 @@ def create_app():
         return render_template(
             "session.html",
             session_id=session_id,
-            counter=current_data["counter"],
+            counter=len(current_data["names"]),
             player_count=current_data.get("player_count", 5),
             user_id=user_id,
             user_role=user_role,
@@ -246,6 +251,12 @@ def create_app():
 
         if name and len(name) <= 50:  # Validate name
             session_store[session_id]["names"][user_id] = name
+
+            # Check if we now have enough players to assign roles
+            current_data = session_store[session_id]
+            if len(current_data["names"]) >= current_data["player_count"]:
+                if "roles" not in current_data:
+                    assign_roles(session_id)
 
         return redirect(url_for("view_session", session_id=session_id))
 
@@ -283,8 +294,8 @@ def create_app():
         if "role_details" in current_data:
             del current_data["role_details"]
 
-        # Check if we have enough players to assign roles now
-        if current_data["counter"] == player_count:
+        # Check if we have enough named players to assign roles now
+        if len(current_data["names"]) == player_count:
             assign_roles(session_id)
 
         return redirect(url_for("view_session", session_id=session_id))
@@ -344,7 +355,7 @@ def create_app():
 
         return jsonify(
             {
-                "counter": current_data["counter"],
+                "counter": len(current_data["names"]),
                 "player_count": current_data["player_count"],
                 "player_names": list(current_data["names"].values()),
                 "user_role": user_role,
