@@ -165,10 +165,10 @@ def create_app():
             current_data["users"].append(user_id)
             session_store[session_id]["counter"] += 1
 
-            # Check if we have enough players to assign roles
-            if current_data["counter"] == current_data["player_count"]:
-                if "roles" not in current_data:
-                    assign_roles(session_id)
+        # Check if we have enough players to assign roles (check every time, not just when joining)
+        if current_data["counter"] >= current_data["player_count"]:
+            if "roles" not in current_data:
+                assign_roles(session_id)
 
         # Get the user's role if roles have been assigned
         user_role = None
