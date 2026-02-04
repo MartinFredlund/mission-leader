@@ -139,6 +139,7 @@ def create_app():
 
         # 4. Initialize the state for this session in our mock DB
         session_store[unique_id] = {
+            "counter": 0,
             "users": [],
             "player_count": player_count,
             "names": {},  # Maps user_id to name
