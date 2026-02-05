@@ -89,6 +89,7 @@
                       name="commander"
                       value="1"
                       class="mt-1 mr-3 w-4 h-4"
+                      {% if special_roles["commander"] %}checked{% endif %}
                     />
                     <div>
                       <span class="font-semibold">Commander</span>
@@ -103,6 +104,7 @@
                       name="bodyguard"
                       value="1"
                       class="mt-1 mr-3 w-4 h-4"
+                      {% if special_roles["bodyguard"] %}checked{% endif %}
                     />
                     <div>
                       <span class="font-semibold">Bodyguard</span>
@@ -124,6 +126,7 @@
                       name="assassin"
                       value="1"
                       class="mt-1 mr-3 w-4 h-4"
+                      {% if special_roles["assassin"] %}checked{% endif %}
                     />
                     <div>
                       <span class="font-semibold">Assassin</span>
@@ -138,6 +141,7 @@
                       name="false_commander"
                       value="1"
                       class="mt-1 mr-3 w-4 h-4"
+                      {% if special_roles["false_commander"] %}checked{% endif %}
                     />
                     <div>
                       <span class="font-semibold">False Commander</span>
@@ -152,6 +156,7 @@
                       name="deep_cover"
                       value="1"
                       class="mt-1 mr-3 w-4 h-4"
+                      {% if special_roles["deep_cover"] %}checked{% endif %}
                     />
                     <div>
                       <span class="font-semibold">Deep Cover</span>
@@ -166,6 +171,7 @@
                       name="blind_spy"
                       value="1"
                       class="mt-1 mr-3 w-4 h-4"
+                      {% if special_roles["blind_spy"] %}checked{% endif %}
                     />
                     <div>
                       <span class="font-semibold">Blind Spy</span>
@@ -185,6 +191,19 @@
               CREATE CLASSIFIED SESSION
             </button>
           </form>
+          <script>
+            window.addEventListener('beforeunload', () => {
+              sessionStorage.setItem('sidebar-scroll', window.scrollY);
+            });
+
+            window.addEventListener('load', () => {
+              const scrollPos = sessionStorage.getItem('sidebar-scroll');
+              if (scrollPos) {
+                window.scrollTo(0, parseInt(scrollPos));
+                sessionStorage.removeItem('sidebar-scroll');
+              }
+            });
+          </script>
         </div>
       </div>
 
