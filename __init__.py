@@ -1,7 +1,10 @@
 from flask import Flask, redirect, url_for, render_template, request, session, jsonify, flash
-import secrets
+import os
 import uuid
 import random
+from datetime import datetime, timedelta
+import threading
+import time
 
 # Role distribution based on player count
 ROLE_CONFIG = {
@@ -13,16 +16,66 @@ ROLE_CONFIG = {
     10: {"resistance": 6, "spies": 4},
 }
 
-# In a real app, use SQLite, PostgreSQL, Redis, etc.
-# Structure: { 'session_id': { 'created_at': ..., 'data': ... } }
+# Session expiration time (2 days)
+SESSION_EXPIRATION_HOURS = 48
+
+# In-memory session storage with timestamps
+# Structure: { 'session_id': { 'created_at': datetime, 'counter': ..., 'users': [], ... } }
 session_store = {}
+
+
+def cleanup_expired_sessions():
+    """Remove sessions older than 2 days."""
+    now = datetime.now()
+    expiration_time = timedelta(hours=SESSION_EXPIRATION_HOURS)
+    expired_sessions = []
+
+    for session_id, data in list(session_store.items()):
+        created_at = data.get("created_at")
+        if created_at and (now - created_at) > expiration_time:
+            expired_sessions.append(session_id)
+
+    for session_id in expired_sessions:
+        del session_store[session_id]
+
+    if expired_sessions:
+        print(f"Cleaned up {len(expired_sessions)} expired session(s)")
+
+
+def session_exists_and_valid(session_id):
+    """Check if a session exists and is not expired."""
+    if session_id not in session_store:
+        return False
+
+    data = session_store[session_id]
+    created_at = data.get("created_at")
+    if created_at:
+        age = datetime.now() - created_at
+        if age > timedelta(hours=SESSION_EXPIRATION_HOURS):
+            del session_store[session_id]
+            return False
+
+    return True
+
+
+def start_cleanup_thread():
+    """Start a background thread to periodically clean up expired sessions."""
+
+    def cleanup_loop():
+        while True:
+            time.sleep(86400)  # Run once per day
+            cleanup_expired_sessions()
+
+    thread = threading.Thread(target=cleanup_loop, daemon=True)
+    thread.start()
 
 
 def assign_roles(session_id):
     """Randomly assign roles to all users in a session."""
     current_data = session_store[session_id]
     player_count = current_data["player_count"]
-    users = current_data["users"].copy()
+    # Only assign roles to players who have entered a name
+    users = list(current_data["names"].keys())
     special_roles = current_data.get("special_roles", {})
 
     # Get role distribution for this player count
@@ -101,7 +154,10 @@ def assign_roles(session_id):
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = secrets.token_hex(16)
+    app.secret_key = os.environ.get("SECRET_KEY")
+
+    # Start background cleanup thread
+    start_cleanup_thread()
 
     # Support for being mounted at a sub-path
     @app.url_defaults
@@ -119,11 +175,22 @@ def create_app():
     def create_session():
         """Generates a unique ID and redirects to the specific session URL."""
         # 1. Get player count from form
-        player_count = int(request.form.get("player_count", 5))
+        player_count_str = request.form.get("player_count")
+
+        if not player_count_str:
+            return (
+                "Error: Player count is required. Please go back and create a session again.",
+                400,
+            )
+
+        player_count = int(player_count_str)
 
         # Validate player count is between 5-10
         if player_count < 5 or player_count > 10:
-            player_count = 5
+            return (
+                "Error: Player count must be between 5 and 10. Please go back and create a session again.",
+                400,
+            )
 
         # 2. Get special roles selection
         special_roles = {
@@ -150,6 +217,8 @@ def create_app():
 
         # 4. Initialize the state for this session in our mock DB
         session_store[unique_id] = {
+            "created_at": datetime.now(),
+            "counter": 0,
             "users": [],
             "player_count": player_count,
             "names": {},  # Maps user_id to name
@@ -165,8 +234,8 @@ def create_app():
         The Dynamic Route.
         Flask captures whatever follows '/s/' and passes it as 'session_id'.
         """
-        # 4. Check if this session actually exists
-        if session_id not in session_store:
+        # 4. Check if this session actually exists and is not expired
+        if not session_exists_and_valid(session_id):
             return "404 - Session not found or expired", 404
 
         # Get or create a unique user ID for this visitor
@@ -176,14 +245,12 @@ def create_app():
         user_id = session["user_id"]
         current_data = session_store[session_id]
 
-        # Only add user if they haven't visited this session before
+        # Track that this user has visited (for users list)
         if user_id not in current_data["users"]:
             current_data["users"].append(user_id)
 
-            # Check if we have enough players to assign roles
-            if len(current_data["users"]) == current_data["player_count"]:
-                if "roles" not in current_data:
-                    assign_roles(session_id)
+        # Counter now represents players with names
+        current_data["counter"] = len(current_data["names"])
 
         # Get the user's role if roles have been assigned
         user_role = None
@@ -210,7 +277,8 @@ def create_app():
 
             elif user_role_detail == "bodyguard":
                 # Bodyguard sees Commander and False Commander
-                for uid, detail in role_details.items():
+                for uid in current_data["roles"].keys():
+                    detail = role_details.get(uid)
                     if detail == "commander" or detail == "false_commander":
                         commander_name = current_data["names"].get(uid)
                         if commander_name:
@@ -234,7 +302,7 @@ def create_app():
         return render_template(
             "session.html",
             session_id=session_id,
-            counter=len(current_data["users"]),
+            counter=current_data["counter"],
             player_count=current_data.get("player_count", 5),
             user_id=user_id,
             user_role=user_role,
@@ -250,8 +318,8 @@ def create_app():
     @app.route("/s/<session_id>/set_name", methods=["POST"])
     def set_name(session_id):
         """Allow a user to set their name for the session."""
-        if session_id not in session_store:
-            return "404 - Session not found", 404
+        if not session_exists_and_valid(session_id):
+            return "404 - Session not found or expired", 404
 
         if "user_id" not in session:
             return redirect(url_for("view_session", session_id=session_id))
@@ -260,23 +328,48 @@ def create_app():
         name = request.form.get("name", "").strip()
 
         if name and len(name) <= 50:  # Validate name
-            session_store[session_id]["names"][user_id] = name
+            current_data = session_store[session_id]
+
+            # Add name only if not already set (prevent race condition overwrites)
+            if user_id not in current_data["names"]:
+                current_data["names"][user_id] = name
+                # Update counter to reflect named players
+                current_data["counter"] = len(current_data["names"])
+
+                # Check if we now have enough players to assign roles
+                # Use double-check to prevent race condition
+                if current_data["counter"] >= current_data["player_count"]:
+                    if "roles" not in current_data:
+                        # Set a flag immediately to prevent concurrent assignment
+                        current_data["roles"] = {}  # Placeholder
+                        assign_roles(session_id)
+            else:
+                # Name already exists, just update it
+                current_data["names"][user_id] = name
 
         return redirect(url_for("view_session", session_id=session_id))
 
     @app.route("/s/<session_id>/reset", methods=["POST"])
     def reset_session(session_id):
         """Reset the session to allow reconfiguration while keeping all players."""
-        if session_id not in session_store:
-            return "404 - Session not found", 404
+        if not session_exists_and_valid(session_id):
+            return "404 - Session not found or expired", 404
 
         if "user_id" not in session:
             return redirect(url_for("view_session", session_id=session_id))
 
         # Get new configuration
-        player_count = int(request.form.get("player_count", 5))
+        player_count_str = request.form.get("player_count")
+
+        if not player_count_str:
+            return "Error: Player count is required. Please try resetting again.", 400
+
+        player_count = int(player_count_str)
         if player_count < 5 or player_count > 10:
-            player_count = 5
+            return (
+                "Error: Player count must be between 5 and 10. Please try resetting again.",
+                400,
+            )
 
         special_roles = {
             "commander": bool(request.form.get("commander")),
@@ -298,8 +391,8 @@ def create_app():
         if "role_details" in current_data:
             del current_data["role_details"]
 
-        # Check if we have enough players to assign roles now
-        if len(current_data["users"]) == player_count:
+        # Check if we have enough named players to assign roles now
+        if len(current_data["names"]) == player_count:
             assign_roles(session_id)
 
         return redirect(url_for("view_session", session_id=session_id))
@@ -307,8 +400,8 @@ def create_app():
     @app.route("/api/s/<session_id>/status")
     def session_status(session_id):
         """API endpoint to get current session status for polling."""
-        if session_id not in session_store:
-            return jsonify({"error": "Session not found"}), 404
+        if not session_exists_and_valid(session_id):
+            return jsonify({"error": "Session not found or expired"}), 404
 
         if "user_id" not in session:
             return jsonify({"error": "User not authenticated"}), 401
@@ -339,7 +432,8 @@ def create_app():
                                 known_spies.append(spy_name)
 
             elif user_role_detail == "bodyguard":
-                for uid, detail in role_details.items():
+                for uid in current_data["roles"].keys():
+                    detail = role_details.get(uid)
                     if detail == "commander" or detail == "false_commander":
                         commander_name = current_data["names"].get(uid)
                         if commander_name:
@@ -359,7 +453,7 @@ def create_app():
 
         return jsonify(
             {
-                "counter": len(current_data["users"]),
+                "counter": current_data["counter"],
                 "player_count": current_data["player_count"],
                 "player_names": list(current_data["names"].values()),
                 "user_role": user_role,
