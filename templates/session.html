@@ -249,14 +249,14 @@
             <div class="flex gap-2">
               <button
                 onclick="showQRCode()"
-                class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+                class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-3 md:px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
                 QR Code
               </button>
               <button
                 id="copy-btn"
                 onclick="copyInviteLink()"
-                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 md:px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 Copy Link
               </button>
@@ -500,7 +500,7 @@
                 </ul>
                 {% if commander_info|length > 1 %}
                 <p class="text-slate-500 text-sm mt-2">
-                  False Commander may be present
+                  False Commander present
                 </p>
                 {% endif %}
               </div>
@@ -533,7 +533,7 @@
                 <h2 class="text-2xl font-bold text-purple-400">
                   FALSE COMMANDER
                 </h2>
-                <p class="text-red-300 text-sm">Classification: Deep Cover</p>
+                <p class="text-red-300 text-sm">Classification: False Leader</p>
               </div>
               {% elif user_role_detail == 'deep_cover' %}
               <div>
