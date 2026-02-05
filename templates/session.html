@@ -127,7 +127,9 @@
             // If user's role has changed (after reset & reassign), reload to show new role
             const currentRole = '{{ user_role }}';
             const currentRoleDetail = '{{ user_role_detail or "" }}';
-            if (data.user_role && (data.user_role !== currentRole || data.user_role_detail !== currentRoleDetail)) {
+            // Normalize null/undefined to empty string for comparison
+            const newRoleDetail = data.user_role_detail || '';
+            if (data.user_role && (data.user_role !== currentRole || newRoleDetail !== currentRoleDetail)) {
               location.reload();
             }
             {% endif %}
