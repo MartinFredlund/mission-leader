@@ -1,4 +1,13 @@
-from flask import Flask, redirect, url_for, render_template, request, session, jsonify, flash
+from flask import (
+    Flask,
+    redirect,
+    url_for,
+    render_template,
+    request,
+    session,
+    jsonify,
+    flash,
+)
 import os
 import uuid
 import random
@@ -178,19 +187,15 @@ def create_app():
         player_count_str = request.form.get("player_count")
 
         if not player_count_str:
-            return (
-                "Error: Player count is required. Please go back and create a session again.",
-                400,
-            )
+            flash("Player count is required. Please try again.", "error")
+            return redirect(url_for("home"))
 
         player_count = int(player_count_str)
 
         # Validate player count is between 5-10
         if player_count < 5 or player_count > 10:
-            return (
-                "Error: Player count must be between 5 and 10. Please go back and create a session again.",
-                400,
-            )
+            flash("Player count must be between 5 and 10. Please try again.", "error")
+            return redirect(url_for("home"))
 
         # 2. Get special roles selection
         special_roles = {
@@ -204,12 +209,15 @@ def create_app():
 
         session["special_roles"] = special_roles
         if (
-            (special_roles["assassin"] and not special_roles["commander"]) or
-            (special_roles["bodyguard"] and not special_roles["commander"]) or
-            (special_roles["false_commander"] and not special_roles["bodyguard"]) or
-            (special_roles["deep_cover"] and not special_roles["commander"])
+            (special_roles["assassin"] and not special_roles["commander"])
+            or (special_roles["bodyguard"] and not special_roles["commander"])
+            or (special_roles["false_commander"] and not special_roles["bodyguard"])
+            or (special_roles["deep_cover"] and not special_roles["commander"])
         ):
-            flash("Invalid role selection")
+            flash(
+                "Invalid role selection. Assassin, Bodyguard, and Deep Cover require Commander. False Commander requires Bodyguard.",
+                "error",
+            )
             return redirect(url_for("home"))
 
         # 3. Generate a unique identifier
@@ -362,14 +370,16 @@ def create_app():
         player_count_str = request.form.get("player_count")
 
         if not player_count_str:
-            return "Error: Player count is required. Please try resetting again.", 400
+            flash("Player count is required. Please try resetting again.", "error")
+            return redirect(url_for("view_session", session_id=session_id))
 
         player_count = int(player_count_str)
         if player_count < 5 or player_count > 10:
-            return (
-                "Error: Player count must be between 5 and 10. Please try resetting again.",
-                400,
+            flash(
+                "Player count must be between 5 and 10. Please try resetting again.",
+                "error",
             )
+            return redirect(url_for("view_session", session_id=session_id))
 
         special_roles = {
             "commander": bool(request.form.get("commander")),
@@ -379,6 +389,19 @@ def create_app():
             "deep_cover": bool(request.form.get("deep_cover")),
             "blind_spy": bool(request.form.get("blind_spy")),
         }
+
+        # Validate role combinations
+        if (
+            (special_roles["assassin"] and not special_roles["commander"])
+            or (special_roles["bodyguard"] and not special_roles["commander"])
+            or (special_roles["false_commander"] and not special_roles["bodyguard"])
+            or (special_roles["deep_cover"] and not special_roles["commander"])
+        ):
+            flash(
+                "Invalid role selection. Assassin, Bodyguard, and Deep Cover require Commander. False Commander requires Bodyguard.",
+                "error",
+            )
+            return redirect(url_for("view_session", session_id=session_id))
 
         # Reset roles but keep users and names
         current_data = session_store[session_id]
