@@ -31,6 +31,7 @@ SESSION_EXPIRATION_HOURS = 48
 # In-memory session storage with timestamps
 # Structure: { 'session_id': { 'created_at': datetime, 'counter': ..., 'users': [], ... } }
 session_store = {}
+session_lock = threading.Lock()
 
 
 def cleanup_expired_sessions():
@@ -39,13 +40,14 @@ def cleanup_expired_sessions():
     expiration_time = timedelta(hours=SESSION_EXPIRATION_HOURS)
     expired_sessions = []
 
-    for session_id, data in list(session_store.items()):
-        created_at = data.get("created_at")
-        if created_at and (now - created_at) > expiration_time:
-            expired_sessions.append(session_id)
+    with session_lock:
+        for session_id, data in list(session_store.items()):
+            created_at = data.get("created_at")
+            if created_at and (now - created_at) > expiration_time:
+                expired_sessions.append(session_id)
 
-    for session_id in expired_sessions:
-        del session_store[session_id]
+        for session_id in expired_sessions:
+            del session_store[session_id]
 
     if expired_sessions:
         print(f"Cleaned up {len(expired_sessions)} expired session(s)")
@@ -53,18 +55,19 @@ def cleanup_expired_sessions():
 
 def session_exists_and_valid(session_id):
     """Check if a session exists and is not expired."""
-    if session_id not in session_store:
-        return False
-
-    data = session_store[session_id]
-    created_at = data.get("created_at")
-    if created_at:
-        age = datetime.now() - created_at
-        if age > timedelta(hours=SESSION_EXPIRATION_HOURS):
-            del session_store[session_id]
+    with session_lock:
+        if session_id not in session_store:
             return False
 
-    return True
+        data = session_store[session_id]
+        created_at = data.get("created_at")
+        if created_at:
+            age = datetime.now() - created_at
+            if age > timedelta(hours=SESSION_EXPIRATION_HOURS):
+                del session_store[session_id]
+                return False
+
+        return True
 
 
 def start_cleanup_thread():
@@ -224,14 +227,15 @@ def create_app():
         unique_id = uuid.uuid4().hex
 
         # 4. Initialize the state for this session in our mock DB
-        session_store[unique_id] = {
-            "created_at": datetime.now(),
-            "counter": 0,
-            "users": [],
-            "player_count": player_count,
-            "names": {},  # Maps user_id to name
-            "special_roles": special_roles,
-        }
+        with session_lock:
+            session_store[unique_id] = {
+                "created_at": datetime.now(),
+                "counter": 0,
+                "users": [],
+                "player_count": player_count,
+                "names": {},  # Maps user_id to name
+                "special_roles": special_roles,
+            }
 
         # 5. Redirect the user to the dynamic route
         return redirect(url_for("view_session", session_id=unique_id))
@@ -251,77 +255,82 @@ def create_app():
             session["user_id"] = uuid.uuid4().hex
 
         user_id = session["user_id"]
-        current_data = session_store[session_id]
 
-        # Track that this user has visited (for users list)
-        if user_id not in current_data["users"]:
-            current_data["users"].append(user_id)
+        with session_lock:
+            current_data = session_store.get(session_id)
+            if current_data is None:
+                return "404 - Session not found or expired", 404
 
-        # Counter now represents players with names
-        current_data["counter"] = len(current_data["names"])
+            # Track that this user has visited (for users list)
+            if user_id not in current_data["users"]:
+                current_data["users"].append(user_id)
 
-        # Get the user's role if roles have been assigned
-        user_role = None
-        user_role_detail = None
-        spy_names = []
-        commander_info = []
-        known_spies = []
+            # Counter now represents players with names
+            current_data["counter"] = len(current_data["names"])
 
-        if "roles" in current_data:
-            user_role = current_data["roles"].get(user_id)
-            role_details = current_data.get("role_details", {})
-            user_role_detail = role_details.get(user_id)
+            # Get the user's role if roles have been assigned
+            user_role = None
+            user_role_detail = None
+            spy_names = []
+            commander_info = []
+            known_spies = []
 
-            # Handle special role information
-            if user_role_detail == "commander":
-                # Commander knows all spies except Deep Cover
-                for uid, role in current_data["roles"].items():
-                    if role == "spy" and uid != user_id:
-                        detail = role_details.get(uid)
-                        if detail != "deep_cover":  # Deep Cover is hidden
-                            spy_name = current_data["names"].get(uid)
-                            if spy_name:
-                                known_spies.append(spy_name)
+            if "roles" in current_data:
+                user_role = current_data["roles"].get(user_id)
+                role_details = current_data.get("role_details", {})
+                user_role_detail = role_details.get(user_id)
 
-            elif user_role_detail == "bodyguard":
-                # Bodyguard sees Commander and False Commander
-                for uid in current_data["roles"].keys():
-                    detail = role_details.get(uid)
-                    if detail == "commander" or detail == "false_commander":
-                        commander_name = current_data["names"].get(uid)
-                        if commander_name:
-                            commander_info.append(commander_name)
-
-            elif user_role == "spy":
-                # Regular spy logic - depends on role detail
-                if user_role_detail == "blind_spy":
-                    # Blind Spy sees no one
-                    spy_names = []
-                else:
-                    # Normal spies and special spies see other spies (except Blind Spy)
+                # Handle special role information
+                if user_role_detail == "commander":
+                    # Commander knows all spies except Deep Cover
                     for uid, role in current_data["roles"].items():
                         if role == "spy" and uid != user_id:
                             detail = role_details.get(uid)
-                            if detail != "blind_spy":  # Blind Spy is not visible
+                            if detail != "deep_cover":  # Deep Cover is hidden
                                 spy_name = current_data["names"].get(uid)
                                 if spy_name:
-                                    spy_names.append(spy_name)
+                                    known_spies.append(spy_name)
 
-        return render_template(
-            "session.html",
-            session_id=session_id,
-            counter=current_data["counter"],
-            player_count=current_data.get("player_count", 5),
-            user_id=user_id,
-            user_role=user_role,
-            user_role_detail=user_role_detail,
-            user_name=current_data["names"].get(user_id),
-            player_names=list(current_data["names"].values()),
-            spy_names=spy_names,
-            known_spies=known_spies,
-            commander_info=commander_info,
-            special_roles=current_data.get("special_roles", {}),
-        )
+                elif user_role_detail == "bodyguard":
+                    # Bodyguard sees Commander and False Commander
+                    for uid in current_data["roles"].keys():
+                        detail = role_details.get(uid)
+                        if detail == "commander" or detail == "false_commander":
+                            commander_name = current_data["names"].get(uid)
+                            if commander_name:
+                                commander_info.append(commander_name)
+
+                elif user_role == "spy":
+                    # Regular spy logic - depends on role detail
+                    if user_role_detail == "blind_spy":
+                        # Blind Spy sees no one
+                        spy_names = []
+                    else:
+                        # Normal spies and special spies see other spies (except Blind Spy)
+                        for uid, role in current_data["roles"].items():
+                            if role == "spy" and uid != user_id:
+                                detail = role_details.get(uid)
+                                if detail != "blind_spy":  # Blind Spy is not visible
+                                    spy_name = current_data["names"].get(uid)
+                                    if spy_name:
+                                        spy_names.append(spy_name)
+
+            template_data = {
+                "session_id": session_id,
+                "counter": current_data["counter"],
+                "player_count": current_data.get("player_count", 5),
+                "user_id": user_id,
+                "user_role": user_role,
+                "user_role_detail": user_role_detail,
+                "user_name": current_data["names"].get(user_id),
+                "player_names": list(current_data["names"].values()),
+                "spy_names": spy_names,
+                "known_spies": known_spies,
+                "commander_info": commander_info,
+                "special_roles": current_data.get("special_roles", {}),
+            }
+
+        return render_template("session.html", **template_data)
 
     @app.route("/s/<session_id>/set_name", methods=["POST"])
     def set_name(session_id):
@@ -336,24 +345,24 @@ def create_app():
         name = request.form.get("name", "").strip()
 
         if name and len(name) <= 50:  # Validate name
-            current_data = session_store[session_id]
+            with session_lock:
+                current_data = session_store.get(session_id)
+                if current_data is None:
+                    return "404 - Session not found or expired", 404
 
-            # Add name only if not already set (prevent race condition overwrites)
-            if user_id not in current_data["names"]:
-                current_data["names"][user_id] = name
-                # Update counter to reflect named players
-                current_data["counter"] = len(current_data["names"])
+                # Add name only if not already set (prevent race condition overwrites)
+                if user_id not in current_data["names"]:
+                    current_data["names"][user_id] = name
+                    # Update counter to reflect named players
+                    current_data["counter"] = len(current_data["names"])
 
-                # Check if we now have enough players to assign roles
-                # Use double-check to prevent race condition
-                if current_data["counter"] >= current_data["player_count"]:
-                    if "roles" not in current_data:
-                        # Set a flag immediately to prevent concurrent assignment
-                        current_data["roles"] = {}  # Placeholder
-                        assign_roles(session_id)
-            else:
-                # Name already exists, just update it
-                current_data["names"][user_id] = name
+                    # Check if we now have enough players to assign roles
+                    if current_data["counter"] >= current_data["player_count"]:
+                        if "roles" not in current_data:
+                            assign_roles(session_id)
+                else:
+                    # Name already exists, just update it
+                    current_data["names"][user_id] = name
 
         return redirect(url_for("view_session", session_id=session_id))
 
@@ -404,19 +413,23 @@ def create_app():
             return redirect(url_for("view_session", session_id=session_id))
 
         # Reset roles but keep users and names
-        current_data = session_store[session_id]
-        current_data["player_count"] = player_count
-        current_data["special_roles"] = special_roles
+        with session_lock:
+            current_data = session_store.get(session_id)
+            if current_data is None:
+                return "404 - Session not found or expired", 404
 
-        # Remove role assignments to start fresh
-        if "roles" in current_data:
-            del current_data["roles"]
-        if "role_details" in current_data:
-            del current_data["role_details"]
+            current_data["player_count"] = player_count
+            current_data["special_roles"] = special_roles
 
-        # Check if we have enough named players to assign roles now
-        if len(current_data["names"]) == player_count:
-            assign_roles(session_id)
+            # Remove role assignments to start fresh
+            if "roles" in current_data:
+                del current_data["roles"]
+            if "role_details" in current_data:
+                del current_data["role_details"]
+
+            # Check if we have enough named players to assign roles now
+            if len(current_data["names"]) == player_count:
+                assign_roles(session_id)
 
         return redirect(url_for("view_session", session_id=session_id))
 
@@ -430,52 +443,55 @@ def create_app():
             return jsonify({"error": "User not authenticated"}), 401
 
         user_id = session["user_id"]
-        current_data = session_store[session_id]
 
-        # Check if user has a role assigned
-        user_role = None
-        user_role_detail = None
-        spy_names = []
-        known_spies = []
-        commander_info = []
+        with session_lock:
+            current_data = session_store.get(session_id)
+            if current_data is None:
+                return jsonify({"error": "Session not found or expired"}), 404
 
-        if "roles" in current_data:
-            user_role = current_data["roles"].get(user_id)
-            role_details = current_data.get("role_details", {})
-            user_role_detail = role_details.get(user_id)
+            # Check if user has a role assigned
+            user_role = None
+            user_role_detail = None
+            spy_names = []
+            known_spies = []
+            commander_info = []
 
-            # Handle special role information (same logic as view_session)
-            if user_role_detail == "commander":
-                for uid, role in current_data["roles"].items():
-                    if role == "spy" and uid != user_id:
-                        detail = role_details.get(uid)
-                        if detail != "deep_cover":
-                            spy_name = current_data["names"].get(uid)
-                            if spy_name:
-                                known_spies.append(spy_name)
+            if "roles" in current_data:
+                user_role = current_data["roles"].get(user_id)
+                role_details = current_data.get("role_details", {})
+                user_role_detail = role_details.get(user_id)
 
-            elif user_role_detail == "bodyguard":
-                for uid in current_data["roles"].keys():
-                    detail = role_details.get(uid)
-                    if detail == "commander" or detail == "false_commander":
-                        commander_name = current_data["names"].get(uid)
-                        if commander_name:
-                            commander_info.append(commander_name)
-
-            elif user_role == "spy":
-                if user_role_detail == "blind_spy":
-                    spy_names = []
-                else:
+                # Handle special role information (same logic as view_session)
+                if user_role_detail == "commander":
                     for uid, role in current_data["roles"].items():
                         if role == "spy" and uid != user_id:
                             detail = role_details.get(uid)
-                            if detail != "blind_spy":
+                            if detail != "deep_cover":
                                 spy_name = current_data["names"].get(uid)
                                 if spy_name:
-                                    spy_names.append(spy_name)
+                                    known_spies.append(spy_name)
 
-        return jsonify(
-            {
+                elif user_role_detail == "bodyguard":
+                    for uid in current_data["roles"].keys():
+                        detail = role_details.get(uid)
+                        if detail == "commander" or detail == "false_commander":
+                            commander_name = current_data["names"].get(uid)
+                            if commander_name:
+                                commander_info.append(commander_name)
+
+                elif user_role == "spy":
+                    if user_role_detail == "blind_spy":
+                        spy_names = []
+                    else:
+                        for uid, role in current_data["roles"].items():
+                            if role == "spy" and uid != user_id:
+                                detail = role_details.get(uid)
+                                if detail != "blind_spy":
+                                    spy_name = current_data["names"].get(uid)
+                                    if spy_name:
+                                        spy_names.append(spy_name)
+
+            response_data = {
                 "counter": current_data["counter"],
                 "player_count": current_data["player_count"],
                 "player_names": list(current_data["names"].values()),
@@ -486,6 +502,7 @@ def create_app():
                 "known_spies": known_spies,
                 "commander_info": commander_info,
             }
-        )
+
+        return jsonify(response_data)
 
     return app
