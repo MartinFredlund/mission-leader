@@ -10,6 +10,14 @@
       body {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
       }
+      @keyframes role-glow {
+        0% { box-shadow: 0 0 20px 4px rgba(168, 85, 247, 0.8); }
+        50% { box-shadow: 0 0 40px 8px rgba(168, 85, 247, 0.4); }
+        100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+      }
+      .new-round-glow {
+        animation: role-glow 5s ease-out;
+      }
     </style>
     <script>
       // Copy invite link to clipboard
@@ -52,29 +60,82 @@
         modal.classList.add('hidden');
       }
 
+      // Kick a player via custom modal
+      let pendingKickUserId = null;
+
+      function kickPlayer(kickUserId, playerName) {
+        pendingKickUserId = kickUserId;
+        document.getElementById('kick-player-name').textContent = playerName;
+        document.getElementById('kick-modal').classList.remove('hidden');
+      }
+
+      function confirmKick() {
+        if (!pendingKickUserId) return;
+        document.getElementById('kick-modal').classList.add('hidden');
+        fetch('{{ url_for("kick_player", session_id=session_id) }}', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: 'kick_user_id=' + encodeURIComponent(pendingKickUserId)
+        }).then(() => location.reload());
+      }
+
+      function cancelKick() {
+        pendingKickUserId = null;
+        document.getElementById('kick-modal').classList.add('hidden');
+      }
+
       // Polling to update session status in real-time
       {% if user_name %}
+      const currentUserId = '{{ user_id }}';
       let pollInterval = setInterval(function() {
         fetch('{{ url_for("session_status", session_id=session_id) }}')
           .then(response => response.json())
           .then(data => {
+            // Detect being kicked
+            if (data.kicked) {
+              clearInterval(pollInterval);
+              alert('You have been removed from this session.');
+              window.location.href = '{{ url_for("home") }}';
+              return;
+            }
+
             // Update counter
             const counterEl = document.getElementById('counter');
             if (counterEl) {
               counterEl.textContent = data.counter;
             }
 
+            // Update round display
+            const roundEl = document.getElementById('round-display');
+            if (roundEl && data.round > 0) {
+              roundEl.textContent = data.round;
+            }
+
             // Update player list
             const playerList = document.getElementById('player-list');
             if (playerList) {
               playerList.innerHTML = '';
-              data.player_names.forEach(name => {
+              data.players.forEach(player => {
                 const li = document.createElement('li');
-                li.className = 'bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-300 flex items-center';
+                li.className = 'bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-300 flex items-center justify-between';
+
+                const left = document.createElement('div');
+                left.className = 'flex items-center';
                 const dot = document.createElement('span');
                 dot.className = 'w-2 h-2 bg-green-500 rounded-full mr-3 animate-pulse';
-                li.appendChild(dot);
-                li.appendChild(document.createTextNode(name));
+                left.appendChild(dot);
+                left.appendChild(document.createTextNode(player.name));
+                li.appendChild(left);
+
+                if (player.id !== currentUserId) {
+                  const btn = document.createElement('button');
+                  btn.className = 'text-slate-500 hover:text-red-400 hover:bg-red-900/30 rounded-lg px-2 py-1 text-sm transition-colors ml-2';
+                  btn.textContent = '✕';
+                  btn.title = 'Remove ' + player.name;
+                  btn.onclick = function() { kickPlayer(player.id, player.name); };
+                  li.appendChild(btn);
+                }
+
                 playerList.appendChild(li);
               });
             }
@@ -121,21 +182,25 @@
             // Only reload if user doesn't have a role yet and roles just got assigned
             {% if not user_role %}
             if (data.roles_assigned && data.user_role) {
-              location.reload();
+              window.location.href = window.location.pathname + '?new_round=1';
             }
             {% else %}
-            // If user's role has changed (after reset & reassign), reload to show new role
-            const currentRole = '{{ user_role }}';
-            const currentRoleDetail = '{{ user_role_detail or "" }}';
-            // Normalize null/undefined to empty string for comparison
-            const newRoleDetail = data.user_role_detail || '';
-            if (data.user_role && (data.user_role !== currentRole || newRoleDetail !== currentRoleDetail)) {
+            // If roles were cleared (e.g. after a kick) or changed, reload
+            if (!data.roles_assigned) {
               location.reload();
+            } else {
+              const currentRole = '{{ user_role }}';
+              const currentRoleDetail = '{{ user_role_detail or "" }}';
+              const currentRound = {{ round }};
+              const newRoleDetail = data.user_role_detail || '';
+              if (data.round !== currentRound || (data.user_role && (data.user_role !== currentRole || newRoleDetail !== currentRoleDetail))) {
+                window.location.href = window.location.pathname + '?new_round=1';
+              }
             }
             {% endif %}
           })
           .catch(error => console.error('Polling error:', error));
-      }, 2000); // Poll every 2 seconds
+      }, 1000); // Poll every second
       {% endif %}
 
       // Toggle role information visibility
@@ -163,6 +228,18 @@
           toggleBtn.textContent = 'Show Setup';
         }
       }
+
+      // Apply glow animation when arriving from a new round
+      document.addEventListener('DOMContentLoaded', function() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('new_round') === '1') {
+          const roleInfo = document.getElementById('role-info');
+          if (roleInfo) {
+            roleInfo.firstElementChild.classList.add('new-round-glow');
+          }
+          history.replaceState(null, '', window.location.pathname);
+        }
+      });
     </script>
   </head>
   <body class="min-h-screen p-4 md:p-8">
@@ -255,6 +332,12 @@
               <p class="text-slate-400 text-sm">Agent Active:</p>
               <p class="text-2xl font-bold text-blue-400">{{ user_name }}</p>
             </div>
+            {% if round > 0 %}
+            <div class="text-center">
+              <p class="text-slate-400 text-sm">Round:</p>
+              <p class="text-2xl font-bold text-purple-400" id="round-display">{{ round }}</p>
+            </div>
+            {% endif %}
             <div class="text-right">
               <p class="text-slate-400 text-sm">Team Size:</p>
               <p class="text-2xl font-bold text-slate-300">
@@ -306,6 +389,24 @@
             <p class="text-slate-400 text-sm text-center">
               Scan this QR code with your phone to join the session
             </p>
+          </div>
+        </div>
+
+        <!-- Kick Confirmation Modal -->
+        <div id="kick-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onclick="cancelKick()">
+          <div class="bg-slate-800 rounded-lg p-6 max-w-sm mx-4 border-2 border-red-700" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold text-slate-200 mb-2">Remove Operative</h3>
+            <p class="text-slate-400 mb-6">
+              Remove <span id="kick-player-name" class="text-red-400 font-semibold"></span> from the session?
+            </p>
+            <div class="flex gap-3">
+              <button onclick="cancelKick()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2 px-4 rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button onclick="confirmKick()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                Remove
+              </button>
+            </div>
           </div>
         </div>
 
@@ -424,14 +525,25 @@
             Operatives in Briefing Room
           </h3>
           <ul id="player-list" class="space-y-2">
-            {% for name in player_names %}
+            {% for pid, name in players %}
             <li
-              class="bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-300 flex items-center"
+              class="bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-300 flex items-center justify-between"
             >
-              <span
-                class="w-2 h-2 bg-green-500 rounded-full mr-3 animate-pulse"
-              ></span>
-              {{ name }}
+              <div class="flex items-center">
+                <span
+                  class="w-2 h-2 bg-green-500 rounded-full mr-3 animate-pulse"
+                ></span>
+                {{ name }}
+              </div>
+              {% if pid != user_id %}
+              <button
+                onclick="kickPlayer('{{ pid }}', '{{ name }}')"
+                class="text-slate-500 hover:text-red-400 hover:bg-red-900/30 rounded-lg px-2 py-1 text-sm transition-colors ml-2"
+                title="Remove {{ name }}"
+              >
+                ✕
+              </button>
+              {% endif %}
             </li>
             {% endfor %}
           </ul>
@@ -665,6 +777,213 @@
             </p>
           </div>
         </div>
+
+        {% if counter >= 5 %}
+        <!-- Reconfigure Game Settings (waiting state) -->
+        <div
+          class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 p-6"
+        >
+          <button
+            onclick="
+              document.getElementById('waiting-config-form').classList.toggle('hidden')
+            "
+            class="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold py-3 px-6 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            Reconfigure Game Settings
+          </button>
+
+          <div
+            id="waiting-config-form"
+            class="hidden mt-6 pt-6 border-t border-slate-700"
+          >
+            <h3 class="text-slate-200 font-semibold mb-4 text-lg">
+              Adjust Settings
+            </h3>
+            <form
+              action="{{ url_for('reset_session', session_id=session_id) }}"
+              method="post"
+              class="space-y-4"
+            >
+              <div>
+                <label
+                  for="waiting_player_count"
+                  class="block text-slate-300 font-semibold mb-2"
+                >
+                  Number of Operatives:
+                </label>
+                <select
+                  name="player_count"
+                  id="waiting_player_count"
+                  required
+                  class="w-full bg-slate-900 border-2 border-slate-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  {% if counter <= 5 %}
+                  <option value="5" {% if player_count == 5 %}selected{% endif %}>
+                    5 Operatives
+                  </option>
+                  {% endif %}
+                  {% if counter <= 6 %}
+                  <option value="6" {% if player_count == 6 %}selected{% endif %}>
+                    6 Operatives
+                  </option>
+                  {% endif %}
+                  {% if counter <= 7 %}
+                  <option value="7" {% if player_count == 7 %}selected{% endif %}>
+                    7 Operatives
+                  </option>
+                  {% endif %}
+                  {% if counter <= 8 %}
+                  <option value="8" {% if player_count == 8 %}selected{% endif %}>
+                    8 Operatives
+                  </option>
+                  {% endif %}
+                  {% if counter <= 9 %}
+                  <option value="9" {% if player_count == 9 %}selected{% endif %}>
+                    9 Operatives
+                  </option>
+                  {% endif %}
+                  {% if counter <= 10 %}
+                  <option value="10" {% if player_count == 10 %}selected{% endif %}>
+                    10 Operatives
+                  </option>
+                  {% endif %}
+                </select>
+                <p class="text-slate-500 text-sm mt-2">
+                  Current players: {{ counter }} (minimum must be {{ counter }}
+                  or more)
+                </p>
+              </div>
+
+              <div
+                class="bg-slate-900/50 rounded-lg p-4 border border-slate-700"
+              >
+                <h4 class="text-slate-200 font-semibold mb-3">
+                  Special Roles (Optional)
+                </h4>
+
+                <div class="mb-3">
+                  <p class="text-green-400 font-semibold mb-2 text-sm">
+                    Resistance:
+                  </p>
+                  <div class="space-y-2 ml-4">
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="commander"
+                        value="1"
+                        {% if special_roles.commander %}checked{% endif %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Commander</span>
+                        <p class="text-xs text-slate-500">Knows all spies (Target for Assassin)</p>
+                      </div>
+                    </label>
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="bodyguard"
+                        value="1"
+                        {% if special_roles.bodyguard %}checked{% endif %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Bodyguard</span>
+                        <p class="text-xs text-slate-500">
+                          Knows the Commander (Requires Commander)
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <p class="text-red-400 font-semibold mb-2 text-sm">Spies:</p>
+                  <div class="space-y-2 ml-4">
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="assassin"
+                        value="1"
+                        {% if special_roles.assassin %}checked{% endif %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Assassin</span>
+                        <p class="text-xs text-slate-500">
+                          Can shoot Commander if Resistance wins (Requires Commander)
+                        </p>
+                      </div>
+                    </label>
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="false_commander"
+                        value="1"
+                        {% if special_roles.false_commander %}checked{% endif %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">False Commander</span>
+                        <p class="text-xs text-slate-500">Appears as Commander to Bodyguard (Requires Bodyguard)</p>
+                      </div>
+                    </label>
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="deep_cover"
+                        value="1"
+                        {% if special_roles.deep_cover %}checked{% endif %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Deep Cover</span>
+                        <p class="text-xs text-slate-500">
+                          Hidden from Commander's knowledge (Requires Commander)
+                        </p>
+                      </div>
+                    </label>
+                    <label
+                      class="flex items-start text-slate-300 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="blind_spy"
+                        value="1"
+                        {% if special_roles.blind_spy %}checked{% endif %}
+                        class="mt-1 mr-3 w-4 h-4"
+                      />
+                      <div>
+                        <span class="font-semibold">Blind Spy</span>
+                        <p class="text-xs text-slate-500">
+                          Doesn't know other spies
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all focus:outline-none focus:ring-4 focus:ring-green-500/50"
+              >
+                Apply & Assign Roles
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
         {% endif %}
 
         <!-- Reset Game Section (shown when roles are assigned) -->
